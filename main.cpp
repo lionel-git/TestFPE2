@@ -1,3 +1,4 @@
+#define _CRT_SECURE_NO_WARNINGS 1
 #include <iostream>
 #include <windows.h>
 #include <format>
@@ -115,6 +116,17 @@ void setThrowFPE()
     G_throwFPE = true;
 }
 
+void unsetThrowFPE()
+{
+    unsigned int cw;
+    _controlfp_s(&cw, 0, 0);
+    unsigned int new_value = cw | (_EM_ZERODIVIDE | _EM_INVALID | _EM_OVERFLOW);
+    _controlfp_s(&cw, new_value, _MCW_EM);
+    std::cout << "Thow FPE desactivated" << std::endl;
+    G_throwFPE = false;
+}
+
+
 double
 toDouble(unsigned long long value)
 {
@@ -142,6 +154,18 @@ hash_result(const char* data, size_t size)
     return result;
 }
 
+void check_initial_vector(size_t N, std::string hash)
+{
+    if (N == 10000000)
+    {
+        if (hash != "e9384d8448ece924f31f4d500017baf6583c37d1eb59a8ba98b78d5b84dd5449")
+        {
+            throw std::runtime_error("Invalid initial vector!");
+        }
+        std::cout << "Inital vector checked" << std::endl;
+    }
+}
+
 std::vector<unsigned long long> 
 generateTestVector(size_t N)
 {
@@ -164,6 +188,7 @@ generateTestVector(size_t N)
     }
     auto hashstr = hash_result((const char*)data.data(), N * sizeof(unsigned long long));
     std::cout << "hash test  : " << hashstr << std::endl;
+    check_initial_vector(N, hashstr);
     return data;
 }
 
@@ -176,9 +201,43 @@ double test_function(double x)
     return  1 / x + 1 / std::sqrt((x * x + 1.235)) + std::log(x * x + 0.12546);
 }
 
-size_t G_last_index = 0;
-void test_calculation(size_t N)
+void save_result(const char* data, size_t size, const std::string& config)
 {
+    std::string filename = std::format("result_{}.bin", config);
+    FILE* f = fopen(filename.c_str(), "wb");
+    if (f != nullptr)
+    {
+        fwrite(data, 1, size, f);
+        fclose(f);
+    }
+}
+
+std::string
+getConfigString(size_t N)
+{
+    std::string config;
+    config += std::format("{}", N);
+    if (G_throwFPE)
+        config += "_FPE";
+#ifdef _WIN64
+    config += "_64bits";
+#else
+    config += "_32bits";
+#endif
+
+#ifdef _DEBUG
+    config += "_Debug";
+#else
+    config += "_Release";
+#endif
+    return config;
+}
+
+size_t G_last_index = 0;
+void test_calculation(size_t N, int counter)
+{
+    auto config = getConfigString(N) + "_" + std::format("_#{}", counter);
+    std::cout << "Config: " << config << std::endl;
     auto data = generateTestVector(N);
     std::vector<unsigned long long> result(N);
 
@@ -189,7 +248,9 @@ void test_calculation(size_t N)
     }
     auto hashstr = hash_result((const char*)result.data(), N * sizeof(unsigned long long));
     std::cout << "hash result: " << hashstr << std::endl;
+    save_result((const char*)result.data(), N * sizeof(unsigned long long), hashstr + "_" + config);
 }
+
 
 int main(int argc, char **argv) 
 {
@@ -198,15 +259,14 @@ int main(int argc, char **argv)
         bool throwfpe = false;
         size_t N = 100;
         parseOption(argc, argv, throwfpe, N);
-        std::cout << "Throw FPE: " << throwfpe << std::endl;
-        std::cout << "N: " << N << std::endl;
-        std::cout << "sizeof(ll) = "<< sizeof(unsigned long long) << std::endl;
-
+        
+        test_calculation(N, 0);
         if (throwfpe)
             setThrowFPE();
-
-        test_calculation(N);
- 
+        test_calculation(N, 1);
+        if (throwfpe)
+            unsetThrowFPE();        
+        test_calculation(N, 2);
     }
     __except (filter_exception(GetExceptionCode(), GetExceptionInformation()))
     {
