@@ -111,14 +111,32 @@ flagsValues()
     return   _EM_ZERODIVIDE | _EM_INVALID | _EM_OVERFLOW;
 }
 
+void showCW(unsigned int cw, unsigned int mask, const std::string& flag)
+{
+    std::cout << std::format("{} mask: 0x{:x}", flag, cw & mask) << std::endl;
+}
+
+void showCW(unsigned int cw)
+{
+    return;
+    showCW(cw, _MCW_EM, "Exception");
+    showCW(cw, _MCW_RC, "Rounding");
+    showCW(cw, _MCW_DN, "Denormal");
+    showCW(cw, _MCW_PC, "Precicion");
+    showCW(cw, _MCW_IC, "Infinity");
+}
+
 static bool G_throwFPE = false;
 void setThrowFPE()
 {
     unsigned int cw;
     _controlfp_s(&cw, 0, 0);
+    showCW(cw);
     unsigned int new_value = cw & ~flagsValues();
     _controlfp_s(&cw, new_value, _MCW_EM);
     std::cout << "Thow FPE activated" << std::endl;
+    _controlfp_s(&cw, 0, 0);
+    showCW(cw);
     G_throwFPE = true;
 }
 
@@ -126,9 +144,12 @@ void unsetThrowFPE()
 {
     unsigned int cw;
     _controlfp_s(&cw, 0, 0);
+    showCW(cw);
     unsigned int new_value = cw | flagsValues();
     _controlfp_s(&cw, new_value, _MCW_EM);
     std::cout << "Thow FPE desactivated" << std::endl;
+    _controlfp_s(&cw, 0, 0);
+    showCW(cw);
     G_throwFPE = false;
 }
 
@@ -215,13 +236,20 @@ generateTestVector(size_t N)
     return data;
 }
 
-double test_function(double x)
+double test_function(double x0)
 {
+    volatile double x = x0;
     while (std::abs(x) > 1e+100)
         x /= 1e+100;
     while (std::abs(x) < 1e-100)
         x *= 1e+100;
     return  1 / x + 1 / std::sqrt((x * x + 1.235)) + std::log(x * x + 0.12546);
+}
+
+unsigned long long
+test_function_ll(unsigned long long n)
+{
+    return toLongLong(test_function(toDouble(n)));
 }
 
 std::string 
@@ -269,7 +297,7 @@ std::string test_calculation(size_t N, int counter)
     for (size_t i = 0; i < N; i++)
     {
         G_last_index = i;
-        result[i] = toLongLong(test_function(toDouble(data[i])));
+        result[i] = test_function_ll(data[i]);
     }
     auto hashstr = hash_result((const char*)result.data(), N * sizeof(unsigned long long));
     std::cout << "hash result: " << hashstr << std::endl;
@@ -319,6 +347,7 @@ compare_results(const std::string& file1, const std::string& file2)
         throw std::runtime_error("Invalid size");
 
     int diffs = 0;
+    auto tv = generateTestVector(data1.size());
     for (size_t i = 0; i < data1.size(); i++)
     {
         if (data1[i] != data2[i])
@@ -326,10 +355,30 @@ compare_results(const std::string& file1, const std::string& file2)
             std::cout << "Difference at index: " << i << std::endl;
             std::cout << "Value1: " << std::format("{}\t0x{:x}", toDouble(data1[i]), data1[i]) << std::endl;
             std::cout << "Value2: " << std::format("{}\t0x{:x}", toDouble(data2[i]), data2[i]) << std::endl;
+            std::cout << "Test Value: " << std::format("{}\t0x{:x}", toDouble(tv[i]), tv[i]) << std::endl;
             ++diffs;
         }
     }
     std::cout << "Diffs: " << diffs << std::endl;
+}
+
+void
+testCase()
+{
+    unsigned long long value = 0xd49279f2e36ac03b;
+
+    setThrowFPE();
+    std::cout << std::format("0x{:x}", test_function_ll(value)) << std::endl;
+
+    unsetThrowFPE();
+    std::cout << std::format("0x{:x}", test_function_ll(value)) << std::endl;
+
+    setThrowFPE();
+    std::cout << std::format("0x{:x}", test_function_ll(value)) << std::endl;
+
+    unsetThrowFPE();
+    std::cout << std::format("0x{:x}", test_function_ll(value)) << std::endl;
+
 }
 
 int effective_main(int argc, char** argv)
@@ -339,6 +388,8 @@ int effective_main(int argc, char** argv)
         bool throwfpe = false;
         size_t N = 100;
         parseOption(argc, argv, throwfpe, N);
+
+        //testCase(); return 0;
 
         std::string file0 = test_calculation(N, 0);
         if (throwfpe)
