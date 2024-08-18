@@ -162,9 +162,25 @@ hash_result(const char* data, size_t size)
 
 void check_initial_vector(size_t N, std::string hash)
 {
-    if (N == 10000000)
+    if (N == 10'000'000)
     {
         if (hash != "e9384d8448ece924f31f4d500017baf6583c37d1eb59a8ba98b78d5b84dd5449")
+        {
+            throw std::runtime_error("Invalid initial vector!");
+        }
+        std::cout << "Inital vector checked" << std::endl;
+    }
+    else if (N == 100'000'000)
+    {
+        if (hash != "a8ddc81dc604f492e32cc402273fa0ae9dfdbf1ce9e6dc1bed1d727a2952b6d9")
+        {
+            throw std::runtime_error("Invalid initial vector!");
+        }
+        std::cout << "Inital vector checked" << std::endl;
+    }
+    else if (N == 1'000'000'000)
+    {
+        if (hash != "d35826ded98b597c832347f5bc6eaa8d4ebb053c513ca9e11b075a15ca721012")
         {
             throw std::runtime_error("Invalid initial vector!");
         }
@@ -192,6 +208,7 @@ generateTestVector(size_t N)
         } while (!std::isfinite(d));
         data[i] = value;
     }
+    std::cout << "Start hashing..." << std::endl;
     auto hashstr = hash_result((const char*)data.data(), N * sizeof(unsigned long long));
     std::cout << "hash test  : " << hashstr << std::endl;
     check_initial_vector(N, hashstr);
@@ -267,10 +284,10 @@ load_result(const std::string& filename)
     if (f != nullptr)
     {
         fseek(f, 0, SEEK_END);
-        size_t size = ftell(f);
+        auto size = _ftelli64(f);
         fseek(f, 0, SEEK_SET);
         if (size % sizeof(unsigned long long) != 0)
-            throw std::runtime_error("Invalid file size");
+            throw std::runtime_error(std::format("Invalid file size: {}", size));
         data.resize(size / sizeof(unsigned long long));
         fread(data.data(), 1, size, f);
         fclose(f);
