@@ -420,9 +420,51 @@ int effective_main(int argc, char** argv)
     return 0;
 }
 
+// Cf https://learn.microsoft.com/en-us/cpp/c-runtime-library/reference/controlfp-s?view=msvc-170
+// Aucun impact de la precision
+// Si /arch:SSE impact
+// Si /arch:SSE2 pas d'impact
+// Plante en x64  Debug
+void test_microsoft(void)
+{
+    double a = 0.1;
+    unsigned int control_word;
+    int err;
+
+    // Show original FP control word and do calculation.
+    err = _controlfp_s(&control_word, 0, 0);
+    std::cout << err << std::endl;
+    if (err)
+        throw std::runtime_error("Error setting control word");
+
+    printf("Original: 0x%.4x\n", control_word);
+    printf("%1.1f * %1.1f = %.15e\n", a, a, a * a);
+
+    // Set precision to 24 bits and recalculate.
+    err = _controlfp_s(&control_word, _PC_24, MCW_PC);
+    std::cout << err << std::endl;
+    if (err)
+        throw std::runtime_error("Error setting control word");
+
+    printf("24-bit:   0x%.4x\n", control_word);
+    printf("%1.1f * %1.1f = %.15e\n", a, a, a * a);
+
+    // Restore default precision-control bits and recalculate.
+    err = _controlfp_s(&control_word, _CW_DEFAULT, MCW_PC);
+    std::cout << err << std::endl;
+    if (err)
+        throw std::runtime_error("Error setting control word");
+
+    printf("Default:  0x%.4x\n", control_word);
+    printf("%1.1f * %1.1f = %.15e\n", a, a, a * a);
+}
+
+
 
 int main(int argc, char **argv) 
 {
+   // test_microsoft(); return 0;
+
     __try
     {
         return effective_main(argc, argv);
