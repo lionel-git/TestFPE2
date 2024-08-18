@@ -392,11 +392,11 @@ int effective_main(int argc, char** argv)
         //testCase(); return 0;
 
         std::string file0 = test_calculation(N, 0);
-        if (throwfpe)
-            setThrowFPE();
+
+        setThrowFPE();
         std::string file1 = test_calculation(N, 1);
-        if (throwfpe)
-            unsetThrowFPE();
+
+        unsetThrowFPE();
         std::string file2 = test_calculation(N, 2);
 
         compare_results(file1, file2);
