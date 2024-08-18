@@ -251,6 +251,53 @@ void test_calculation(size_t N, int counter)
     save_result((const char*)result.data(), N * sizeof(unsigned long long), hashstr + "_" + config);
 }
 
+std::vector<unsigned long long> 
+load_result(const std::string& filename)
+{
+    std::vector<unsigned long long> data;
+    FILE* f = fopen(filename.c_str(), "rb");
+    if (f != nullptr)
+    {
+        fseek(f, 0, SEEK_END);
+        size_t size = ftell(f);
+        fseek(f, 0, SEEK_SET);
+        if (size % sizeof(unsigned long long) != 0)
+            throw std::runtime_error("Invalid file size");
+        data.resize(size / sizeof(unsigned long long));
+        fread(data.data(), 1, size, f);
+        fclose(f);
+    }
+    return data;
+}
+
+void 
+compare_results()
+{
+    std::string file1 = "result_ba18c0cbd7220b4645bd832e16a4f7b453b79340c1a6b35bf09363ce9e4f9203_10000000_32bits_Release__#0.bin";
+    std::string file2 = "result_7c448f88e2a76a4c05b133c84d2f487e54a7a16410bb6e1109067b6813a535ac_10000000_FPE_32bits_Release__#1.bin";
+
+    auto data1 = load_result(file1);
+    auto data2 = load_result(file2);
+
+    auto hash1= hash_result((const char*)data1.data(), data1.size() * sizeof(unsigned long long));
+    auto hash2 = hash_result((const char*)data2.data(), data2.size() * sizeof(unsigned long long));
+
+    std::cout << file1  << " : " << hash1 << std::endl;
+    std::cout << file2  << " : " << hash2 << std::endl;
+
+    if (data1.size() != data2.size())
+        throw std::runtime_error("Invalid size");
+
+    for (size_t i = 0; i < data1.size(); i++)
+    {
+        if (data1[i] != data2[i])
+        {
+            std::cout << "Difference at index: " << i << std::endl;
+            std::cout << "Value1: " << std::format("{}\t0x{:x}", toDouble(data1[i]), data1[i]) << std::endl;
+            std::cout << "Value2: " << std::format("{}\t0x{:x}", toDouble(data2[i]), data2[i]) << std::endl;
+        }
+    }
+}
 
 int main(int argc, char **argv) 
 {
@@ -260,13 +307,19 @@ int main(int argc, char **argv)
         size_t N = 100;
         parseOption(argc, argv, throwfpe, N);
         
-        test_calculation(N, 0);
-        if (throwfpe)
-            setThrowFPE();
-        test_calculation(N, 1);
-        if (throwfpe)
-            unsetThrowFPE();        
-        test_calculation(N, 2);
+        bool doCalculation = false;
+        if (doCalculation)
+        {
+            test_calculation(N, 0);
+            if (throwfpe)
+                setThrowFPE();
+            test_calculation(N, 1);
+            if (throwfpe)
+                unsetThrowFPE();
+            test_calculation(N, 2);
+        }
+
+        compare_results();
     }
     __except (filter_exception(GetExceptionCode(), GetExceptionInformation()))
     {
