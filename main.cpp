@@ -126,16 +126,26 @@ void showCW(unsigned int cw)
     showCW(cw, _MCW_IC, "Infinity");
 }
 
+void my_control_fp_s(unsigned int* cw, unsigned int newValue, unsigned int mask)
+{
+    auto ret = _controlfp_s(cw, newValue, mask);
+    if (ret != 0)
+    {
+        throw std::runtime_error("Error setting control word");
+    }
+}
+
 static bool G_throwFPE = false;
 void setThrowFPE()
 {
     unsigned int cw;
-    _controlfp_s(&cw, 0, 0);
+    my_control_fp_s(&cw, 0, 0);
     showCW(cw);
     unsigned int new_value = cw & ~flagsValues();
-    _controlfp_s(&cw, new_value, _MCW_EM);
+    my_control_fp_s(&cw, new_value, _MCW_EM);
     std::cout << "Thow FPE activated" << std::endl;
-    _controlfp_s(&cw, 0, 0);
+    my_control_fp_s(&cw, 0, 0);
+    //my_control_fp_s(&cw, _PC_24, MCW_PC);    
     showCW(cw);
     G_throwFPE = true;
 }
@@ -143,12 +153,13 @@ void setThrowFPE()
 void unsetThrowFPE()
 {
     unsigned int cw;
-    _controlfp_s(&cw, 0, 0);
+    my_control_fp_s(&cw, 0, 0);
     showCW(cw);
     unsigned int new_value = cw | flagsValues();
-    _controlfp_s(&cw, new_value, _MCW_EM);
+    my_control_fp_s(&cw, new_value, _MCW_EM);
     std::cout << "Thow FPE desactivated" << std::endl;
-    _controlfp_s(&cw, 0, 0);
+    my_control_fp_s(&cw, 0, 0);
+    //my_control_fp_s(&cw, _PC_24, MCW_PC);
     showCW(cw);
     G_throwFPE = false;
 }
