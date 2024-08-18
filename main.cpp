@@ -1,6 +1,217 @@
 #include <iostream>
+#include <windows.h>
+#include <format>
+#include <vector>
+#include <random>
+#include "sha256.h"
 
-int main() {
-    std::cout << "Hello, World!" << std::endl;
+int filter_exception(unsigned int code, struct _EXCEPTION_POINTERS* ep)
+{
+    std::cout << std::format("Exception code: 0x{:x}", code);
+    if (ep != nullptr && ep->ExceptionRecord != nullptr)
+        std::cout << ", Address=0x" << (void*)ep->ExceptionRecord->ExceptionAddress;
+    std::cout << " : ";
+    switch (code)
+    {
+    case  EXCEPTION_ACCESS_VIOLATION:
+        std::cout << "Acess Violation" << std::endl;
+        break;
+    case  EXCEPTION_DATATYPE_MISALIGNMENT:
+        std::cout << "Data Type MisAlignement" << std::endl;
+        break;
+    case  EXCEPTION_BREAKPOINT:
+        std::cout << "Breakpoint" << std::endl;
+        break;
+    case  EXCEPTION_SINGLE_STEP:
+        std::cout << "Single Step" << std::endl;
+        break;
+    case  EXCEPTION_ARRAY_BOUNDS_EXCEEDED:
+        std::cout << "Array Bounds Exceeded" << std::endl;
+        break;
+    case  EXCEPTION_FLT_DENORMAL_OPERAND:
+        std::cout << "Floating Point Denormal Operand" << std::endl;
+        break;
+    case  EXCEPTION_FLT_DIVIDE_BY_ZERO:
+        std::cout << "Floating Point Divide By Zero" << std::endl;
+        break;
+    case  EXCEPTION_FLT_INEXACT_RESULT:
+        std::cout << "Floating Point Inexact Result" << std::endl;
+        break;
+    case  EXCEPTION_FLT_INVALID_OPERATION:
+        std::cout << "Floating Point Invalid Operation" << std::endl;
+        break;
+    case  EXCEPTION_FLT_OVERFLOW:
+        std::cout << "Floating Point Overflow" << std::endl;
+        break;
+    case  EXCEPTION_FLT_STACK_CHECK:
+        std::cout << "Floating Point Stack Check" << std::endl;
+        break;
+    case  EXCEPTION_FLT_UNDERFLOW:
+        std::cout << "Floating Point Underflow" << std::endl;
+        break;
+    case  EXCEPTION_INT_DIVIDE_BY_ZERO:
+        std::cout << "Integer Divide By Zero" << std::endl;
+        break;
+    case  EXCEPTION_INT_OVERFLOW:
+        std::cout << "Integer Overflow" << std::endl;
+        break;
+    case  EXCEPTION_PRIV_INSTRUCTION:
+        std::cout << "Privileged Instruction" << std::endl;
+        break;
+    case  EXCEPTION_IN_PAGE_ERROR:
+        std::cout << "Page Error" << std::endl;
+        break;
+    case  EXCEPTION_ILLEGAL_INSTRUCTION:
+        std::cout << "Illegal Instruction" << std::endl;
+        break;
+    case  EXCEPTION_NONCONTINUABLE_EXCEPTION:
+        std::cout << "Non Continuable Exception" << std::endl;
+        break;
+    case  EXCEPTION_STACK_OVERFLOW:
+        std::cout << "Stack Overflow" << std::endl;
+        break;
+    case  EXCEPTION_INVALID_DISPOSITION:
+        std::cout << "Invalid Disposition" << std::endl;
+        break;
+    case  EXCEPTION_GUARD_PAGE:
+        std::cout << "Guard Page" << std::endl;
+        break;
+    case  EXCEPTION_INVALID_HANDLE:
+        std::cout << "Invalid Handle" << std::endl;
+        break;
+    case  CONTROL_C_EXIT:
+        std::cout << "Control-C Exit" << std::endl;
+        break;
+    default:
+        std::cout << "Unknown Exception" << std::endl;
+        break;
+    }
+    return EXCEPTION_EXECUTE_HANDLER;
+}
+
+void parseOption(int argc, char** argv, bool& throwfpe, size_t& N)
+{
+    for (int i = 0; i < argc; i++)
+    {
+        if (strcmp(argv[i], "-throwfpe") == 0)
+        {
+            throwfpe = true;
+        }
+        if (strcmp(argv[i], "-N") == 0)
+        {
+            N = atoll(argv[i + 1]);
+        }
+    }
+}
+
+static bool G_throwFPE = false;
+void setThrowFPE()
+{
+    unsigned int cw;
+    _controlfp_s(&cw, 0, 0);
+    unsigned int new_value = cw & ~(_EM_ZERODIVIDE | _EM_INVALID | _EM_OVERFLOW);
+    _controlfp_s(&cw, new_value, _MCW_EM);
+    std::cout << "Thow FPE activated" << std::endl;
+    G_throwFPE = true;
+}
+
+double
+toDouble(unsigned long long value)
+{
+    return *reinterpret_cast<double*>(&value);
+}
+
+unsigned long long 
+toLongLong(double value)
+{
+    return *reinterpret_cast<unsigned long long*>(&value);
+}
+
+std::string
+hash_result(const char* data, size_t size)
+{
+    SHA256_CTX ctx;
+    sha256_init(&ctx);
+    sha256_update(&ctx, (const BYTE*)data, size);
+    unsigned char out[32];
+    sha256_final(&ctx, out);
+
+    std::string result;
+    for (int i = 0; i < 32; i++)
+        result += std::format("{:02x}", (int)out[i]);
+    return result;
+}
+
+std::vector<unsigned long long> 
+generateTestVector(size_t N)
+{
+    std::vector<unsigned long long> data(N);
+    std::mt19937_64 gen64;
+    for (size_t i = 0; i < N; i++)
+    {
+        unsigned long long value;
+        double d;
+        do
+        {
+            do
+            {
+                value = gen64();
+            } while ((value >= 0x7FF0000000000001 && value <= 0x7FF7FFFFFFFFFFFF) ||
+                (value >= 0xFFF0000000000001 && value <= 0xFFF7FFFFFFFFFFFF));
+            d = toDouble(value);
+        } while (!std::isfinite(d));
+        data[i] = value;
+    }
+    auto hashstr = hash_result((const char*)data.data(), N * sizeof(unsigned long long));
+    std::cout << "hash test  : " << hashstr << std::endl;
+    return data;
+}
+
+double test_function(double x)
+{
+    while (std::abs(x) > 1e+100)
+        x /= 1e+100;
+    while (std::abs(x) < 1e-100)
+        x *= 1e+100;
+    return  1 / x + 1 / std::sqrt((x * x + 1.235)) + std::log(x * x + 0.12546);
+}
+
+size_t G_last_index = 0;
+void test_calculation(size_t N)
+{
+    auto data = generateTestVector(N);
+    std::vector<unsigned long long> result(N);
+
+    for (size_t i = 0; i < N; i++)
+    {
+        G_last_index = i;
+        result[i] = toLongLong(test_function(toDouble(data[i])));
+    }
+    auto hashstr = hash_result((const char*)result.data(), N * sizeof(unsigned long long));
+    std::cout << "hash result: " << hashstr << std::endl;
+}
+
+int main(int argc, char **argv) 
+{
+    __try
+    {
+        bool throwfpe = false;
+        size_t N = 100;
+        parseOption(argc, argv, throwfpe, N);
+        std::cout << "Throw FPE: " << throwfpe << std::endl;
+        std::cout << "N: " << N << std::endl;
+        std::cout << "sizeof(ll) = "<< sizeof(unsigned long long) << std::endl;
+
+        if (throwfpe)
+            setThrowFPE();
+
+        test_calculation(N);
+ 
+    }
+    __except (filter_exception(GetExceptionCode(), GetExceptionInformation()))
+    {
+        std::cout << "Last index: " << G_last_index << std::endl;
+        exit(GetExceptionCode());
+    }
     return 0;
 }
